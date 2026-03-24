@@ -387,8 +387,14 @@ const codegenMode = async () => {
   });
 };
 
-if (figma.editorType === "dev" || figma.mode === "codegen") {
-  codegenMode();
-} else {
-  standardMode();
+switch (figma.mode) {
+  case "default":
+  case "inspect":
+    standardMode();
+    break;
+  case "codegen":
+    codegenMode();
+    break;
+  default:
+    break;
 }
