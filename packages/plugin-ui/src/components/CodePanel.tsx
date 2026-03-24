@@ -153,11 +153,8 @@ const CodePanel = (props: CodePanelProps) => {
               onMouseLeave={handleButtonLeave}
             />
             <DownloadButton
-              value={
-                hasTextStyles
-                  ? `${prefixedCode}\n\n/* Text Styles */\n${textStyles}`
-                  : prefixedCode
-              }
+              code={prefixedCode}
+              textStyles={hasTextStyles ? textStyles : ""}
               selectedFramework={selectedFramework}
               onMouseEnter={handleButtonHover}
               onMouseLeave={handleButtonLeave}

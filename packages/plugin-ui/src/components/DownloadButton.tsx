@@ -29,7 +29,8 @@ declare global {
 }
 
 interface DownloadButtonProps {
-  value: string;
+  code: string;
+  textStyles: string;
   selectedFramework: Framework;
   className?: string;
   onMouseEnter?: () => void;
@@ -45,8 +46,92 @@ const frameworkExtensions: Record<Framework, string> = {
   Compose: ".kt",
 };
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function generateReportHtml(
+  title: string,
+  code: string,
+  textStyles: string,
+  pngFilename: string | null,
+): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(title)}</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    background: #fafafa;
+    color: #1a1a1a;
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    border-bottom: 2px solid #e5e5e5;
+    padding-bottom: 12px;
+    margin-bottom: 32px;
+  }
+  h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #444;
+    margin: 32px 0 12px 0;
+  }
+  pre {
+    background: #1b1b1b;
+    color: #e0e0e0;
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .snapshot img {
+    max-width: 100%;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+<h1>${escapeHtml(title)}</h1>
+
+<h2>Layout</h2>
+<pre><code>${escapeHtml(code)}</code></pre>
+${
+  textStyles
+    ? `
+<h2>Text Styles</h2>
+<pre><code>${escapeHtml(textStyles)}</code></pre>`
+    : ""
+}
+${
+  pngFilename
+    ? `
+<h2>Snapshot</h2>
+<div class="snapshot">
+  <img src="./${escapeHtml(pngFilename)}" alt="${escapeHtml(title)} snapshot" />
+</div>`
+    : ""
+}
+</body>
+</html>`;
+}
+
 export function DownloadButton({
-  value,
+  code,
+  textStyles,
   selectedFramework,
   className,
   onMouseEnter,
@@ -57,12 +142,13 @@ export function DownloadButton({
   const [filename, setFilename] = useState("figma-export");
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
-  const [folderSupported] = useState(() => typeof window !== "undefined" && !!window.showDirectoryPicker);
+  const [dirHandle, setDirHandle] =
+    useState<FileSystemDirectoryHandle | null>(null);
+  const [folderSupported] = useState(
+    () => typeof window !== "undefined" && !!window.showDirectoryPicker,
+  );
   const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const extension = frameworkExtensions[selectedFramework] ?? ".html";
 
   useEffect(() => {
     if (isDownloaded) {
@@ -101,7 +187,6 @@ export function DownloadButton({
       setDirHandle(handle);
       console.log("[UI] Folder selected:", handle.name);
     } catch (e: any) {
-      // User cancelled picker
       if (e?.name !== "AbortError") {
         console.error("[UI] showDirectoryPicker error:", e);
       }
@@ -110,30 +195,37 @@ export function DownloadButton({
 
   const saveToFolder = async (
     sanitizedName: string,
+    htmlContent: string,
     pngData: number[] | null,
   ) => {
     if (!dirHandle) return;
 
-    // Write code file
-    const codeFile = await dirHandle.getFileHandle(`${sanitizedName}${extension}`, { create: true });
-    const codeWritable = await codeFile.createWritable();
-    await codeWritable.write(value);
-    await codeWritable.close();
-    console.log("[UI] Code file saved to folder");
+    // Write HTML report
+    const htmlFile = await dirHandle.getFileHandle(`${sanitizedName}.html`, {
+      create: true,
+    });
+    const htmlWritable = await htmlFile.createWritable();
+    await htmlWritable.write(htmlContent);
+    await htmlWritable.close();
 
     // Write PNG file
     if (pngData) {
-      const pngFile = await dirHandle.getFileHandle(`${sanitizedName}.png`, { create: true });
+      const pngFile = await dirHandle.getFileHandle(`${sanitizedName}.png`, {
+        create: true,
+      });
       const pngWritable = await pngFile.createWritable();
       await pngWritable.write(new Uint8Array(pngData));
       await pngWritable.close();
-      console.log("[UI] PNG file saved to folder");
     }
   };
 
-  const saveAsZip = async (sanitizedName: string, pngData: number[] | null) => {
+  const saveAsZip = async (
+    sanitizedName: string,
+    htmlContent: string,
+    pngData: number[] | null,
+  ) => {
     const zip = new JSZip();
-    zip.file(`${sanitizedName}${extension}`, value);
+    zip.file(`${sanitizedName}.html`, htmlContent);
     if (pngData) {
       zip.file(`${sanitizedName}.png`, new Uint8Array(pngData));
     }
@@ -153,19 +245,25 @@ export function DownloadButton({
     setIsExporting(true);
 
     try {
-      // Request PNG export first
+      // Request PNG export
       let pngData: number[] | null = null;
       if (onRequestExportPng) {
         pngData = await onRequestExportPng();
-        console.log("[UI] PNG data received:", pngData ? pngData.length + " bytes" : "null");
       }
 
+      // Generate HTML report
+      const pngFilename = pngData ? `${sanitizedName}.png` : null;
+      const htmlContent = generateReportHtml(
+        sanitizedName,
+        code,
+        textStyles,
+        pngFilename,
+      );
+
       if (dirHandle) {
-        // Save directly to folder
-        await saveToFolder(sanitizedName, pngData);
+        await saveToFolder(sanitizedName, htmlContent, pngData);
       } else {
-        // Fallback: ZIP download
-        await saveAsZip(sanitizedName, pngData);
+        await saveAsZip(sanitizedName, htmlContent, pngData);
       }
 
       setIsDownloaded(true);
@@ -224,7 +322,7 @@ export function DownloadButton({
 
       {isOpen && (
         <div className="absolute right-0 top-full mt-2 z-50 w-72 bg-card border rounded-lg shadow-lg p-3 flex flex-col gap-2">
-          {/* Folder selector (only shown if API is supported) */}
+          {/* Folder selector */}
           {folderSupported && (
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-gray-700 dark:text-gray-300">
@@ -242,7 +340,9 @@ export function DownloadButton({
                 ) : (
                   <>
                     <Folder className="h-4 w-4 text-gray-400 shrink-0" />
-                    <span className="text-gray-400 text-xs">Click to select folder...</span>
+                    <span className="text-gray-400 text-xs">
+                      Click to select folder...
+                    </span>
                   </>
                 )}
               </button>
@@ -271,13 +371,13 @@ export function DownloadButton({
                 disabled={isExporting}
               />
               <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                {dirHandle ? extension : ".zip"}
+                {dirHandle ? "" : ".zip"}
               </span>
             </div>
             <p className="text-xs text-gray-400">
               {dirHandle
-                ? `Saves: ${filename.trim() || "figma-export"}${extension} + .png → ${dirHandle.name}/`
-                : `Contains: ${filename.trim() || "figma-export"}${extension} + .png`}
+                ? `${dirHandle.name}/${filename.trim() || "figma-export"}.html + .png`
+                : `Contains: .html (report) + .png (snapshot)`}
             </p>
           </div>
 
