@@ -17,6 +17,8 @@ import { TailwindSettings } from "./TailwindSettings";
 interface CodePanelProps {
   code: string;
   textStyles: string;
+  selectedNodeName?: string;
+  selectedNodeSize?: { width: number; height: number };
   selectedFramework: Framework;
   settings: PluginSettings | null;
   preferenceOptions: LocalCodegenPreferenceOptions[];
@@ -155,6 +157,8 @@ const CodePanel = (props: CodePanelProps) => {
             <DownloadButton
               code={prefixedCode}
               textStyles={hasTextStyles ? textStyles : ""}
+              selectedNodeName={props.selectedNodeName}
+              selectedNodeSize={props.selectedNodeSize}
               selectedFramework={selectedFramework}
               onMouseEnter={handleButtonHover}
               onMouseLeave={handleButtonLeave}

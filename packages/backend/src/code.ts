@@ -134,9 +134,18 @@ export const run = async (settings: PluginSettings) => {
       break;
   }
 
+  // Extract selected node metadata
+  const firstNode = selection[0];
+  const selectedNodeName = firstNode?.name;
+  const selectedNodeSize = firstNode
+    ? { width: Math.round(firstNode.width), height: Math.round(firstNode.height) }
+    : undefined;
+
   postConversionComplete({
     code,
     textStyles,
+    selectedNodeName,
+    selectedNodeSize,
     htmlPreview,
     colors,
     gradients,

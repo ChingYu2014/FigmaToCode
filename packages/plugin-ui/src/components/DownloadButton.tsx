@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Download, Check, Loader2, Folder, FolderOpen } from "lucide-react";
+import {
+  Download,
+  Check,
+  Loader2,
+  Folder,
+  FolderOpen,
+  AlertCircle,
+} from "lucide-react";
 import { cn } from "../lib/utils";
 import type { Framework } from "types";
 import JSZip from "jszip";
@@ -14,6 +21,7 @@ declare global {
     }) => Promise<FileSystemDirectoryHandle>;
   }
   interface FileSystemDirectoryHandle {
+    name: string;
     getFileHandle(
       name: string,
       options?: { create?: boolean },
@@ -31,20 +39,14 @@ declare global {
 interface DownloadButtonProps {
   code: string;
   textStyles: string;
+  selectedNodeName?: string;
+  selectedNodeSize?: { width: number; height: number };
   selectedFramework: Framework;
   className?: string;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
   onRequestExportPng?: () => Promise<number[] | null>;
 }
-
-const frameworkExtensions: Record<Framework, string> = {
-  HTML: ".html",
-  Tailwind: ".html",
-  Flutter: ".dart",
-  SwiftUI: ".swift",
-  Compose: ".kt",
-};
 
 function escapeHtml(str: string): string {
   return str
@@ -54,12 +56,43 @@ function escapeHtml(str: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function sanitizeFilename(name: string): string {
+  return name
+    .replace(/[^a-zA-Z0-9\u4e00-\u9fff\u3400-\u4dbf_-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .toLowerCase();
+}
+
 function generateReportHtml(
   title: string,
   code: string,
   textStyles: string,
   pngFilename: string | null,
+  framework: string,
+  nodeSize?: { width: number; height: number },
 ): string {
+  const now = new Date();
+  const exportTime = now.toLocaleString("en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  const metaItems = [
+    `<li><strong>Framework:</strong> ${escapeHtml(framework)}</li>`,
+    `<li><strong>Exported:</strong> ${escapeHtml(exportTime)}</li>`,
+    nodeSize
+      ? `<li><strong>Size:</strong> ${nodeSize.width} x ${nodeSize.height} px</li>`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n      ");
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -80,7 +113,20 @@ function generateReportHtml(
     font-weight: 700;
     border-bottom: 2px solid #e5e5e5;
     padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+  .meta {
+    font-size: 13px;
+    color: #888;
     margin-bottom: 32px;
+  }
+  .meta ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
   }
   h2 {
     font-size: 18px;
@@ -106,6 +152,11 @@ function generateReportHtml(
 </head>
 <body>
 <h1>${escapeHtml(title)}</h1>
+<div class="meta">
+  <ul>
+    ${metaItems}
+  </ul>
+</div>
 
 <h2>Layout</h2>
 <pre><code>${escapeHtml(code)}</code></pre>
@@ -132,6 +183,8 @@ ${
 export function DownloadButton({
   code,
   textStyles,
+  selectedNodeName,
+  selectedNodeSize,
   selectedFramework,
   className,
   onMouseEnter,
@@ -139,9 +192,10 @@ export function DownloadButton({
   onRequestExportPng,
 }: DownloadButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [filename, setFilename] = useState("figma-export");
+  const [filename, setFilename] = useState("");
   const [isDownloaded, setIsDownloaded] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dirHandle, setDirHandle] =
     useState<FileSystemDirectoryHandle | null>(null);
   const [folderSupported] = useState(
@@ -150,12 +204,26 @@ export function DownloadButton({
   const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-fill filename from selected node name
+  useEffect(() => {
+    if (selectedNodeName) {
+      setFilename(sanitizeFilename(selectedNodeName));
+    }
+  }, [selectedNodeName]);
+
   useEffect(() => {
     if (isDownloaded) {
       const timer = setTimeout(() => setIsDownloaded(false), 1500);
       return () => clearTimeout(timer);
     }
   }, [isDownloaded]);
+
+  useEffect(() => {
+    if (errorMsg) {
+      const timer = setTimeout(() => setErrorMsg(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMsg]);
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -185,10 +253,9 @@ export function DownloadButton({
     try {
       const handle = await window.showDirectoryPicker!({ mode: "readwrite" });
       setDirHandle(handle);
-      console.log("[UI] Folder selected:", handle.name);
     } catch (e: any) {
       if (e?.name !== "AbortError") {
-        console.error("[UI] showDirectoryPicker error:", e);
+        setErrorMsg("Failed to select folder. This feature may not be supported in Figma.");
       }
     }
   };
@@ -200,7 +267,6 @@ export function DownloadButton({
   ) => {
     if (!dirHandle) return;
 
-    // Write HTML report
     const htmlFile = await dirHandle.getFileHandle(`${sanitizedName}.html`, {
       create: true,
     });
@@ -208,7 +274,6 @@ export function DownloadButton({
     await htmlWritable.write(htmlContent);
     await htmlWritable.close();
 
-    // Write PNG file
     if (pngData) {
       const pngFile = await dirHandle.getFileHandle(`${sanitizedName}.png`, {
         create: true,
@@ -243,12 +308,16 @@ export function DownloadButton({
   const handleDownload = async () => {
     const sanitizedName = filename.trim() || "figma-export";
     setIsExporting(true);
+    setErrorMsg(null);
 
     try {
       // Request PNG export
       let pngData: number[] | null = null;
       if (onRequestExportPng) {
         pngData = await onRequestExportPng();
+        if (!pngData) {
+          setErrorMsg("PNG export failed or timed out. Saving without snapshot.");
+        }
       }
 
       // Generate HTML report
@@ -258,18 +327,27 @@ export function DownloadButton({
         code,
         textStyles,
         pngFilename,
+        selectedFramework,
+        selectedNodeSize,
       );
 
       if (dirHandle) {
-        await saveToFolder(sanitizedName, htmlContent, pngData);
+        try {
+          await saveToFolder(sanitizedName, htmlContent, pngData);
+        } catch (e: any) {
+          // Folder permission might have been revoked, fallback to ZIP
+          setDirHandle(null);
+          setErrorMsg("Folder access lost. Downloading as ZIP instead.");
+          await saveAsZip(sanitizedName, htmlContent, pngData);
+        }
       } else {
         await saveAsZip(sanitizedName, htmlContent, pngData);
       }
 
       setIsDownloaded(true);
       setIsOpen(false);
-    } catch (e) {
-      console.error("[UI] Download error:", e);
+    } catch (e: any) {
+      setErrorMsg(`Download failed: ${e?.message || "Unknown error"}`);
     } finally {
       setIsExporting(false);
     }
@@ -322,6 +400,14 @@ export function DownloadButton({
 
       {isOpen && (
         <div className="absolute right-0 top-full mt-2 z-50 w-72 bg-card border rounded-lg shadow-lg p-3 flex flex-col gap-2">
+          {/* Error message */}
+          {errorMsg && (
+            <div className="flex items-start gap-1.5 p-2 text-xs bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-md">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
           {/* Folder selector */}
           {folderSupported && (
             <div className="flex flex-col gap-1">

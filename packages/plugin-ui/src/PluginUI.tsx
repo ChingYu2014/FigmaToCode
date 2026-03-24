@@ -26,6 +26,8 @@ import React from "react";
 type PluginUIProps = {
   code: string;
   textStyles: string;
+  selectedNodeName?: string;
+  selectedNodeSize?: { width: number; height: number };
   htmlPreview: HTMLPreview;
   warnings: Warning[];
   selectedFramework: Framework;
@@ -178,6 +180,8 @@ export const PluginUI = (props: PluginUIProps) => {
             <CodePanel
               code={props.code}
               textStyles={props.textStyles}
+              selectedNodeName={props.selectedNodeName}
+              selectedNodeSize={props.selectedNodeSize}
               selectedFramework={props.selectedFramework}
               preferenceOptions={preferenceOptions}
               selectPreferenceOptions={selectPreferenceOptions}

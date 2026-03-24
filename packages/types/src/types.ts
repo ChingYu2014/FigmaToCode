@@ -44,6 +44,8 @@ export interface PluginSettings
 export interface ConversionData {
   code: string;
   textStyles: string;
+  selectedNodeName?: string;
+  selectedNodeSize?: { width: number; height: number };
   settings: PluginSettings;
   htmlPreview: HTMLPreview;
   colors: SolidColorConversion[];

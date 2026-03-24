@@ -18,6 +18,8 @@ import copy from "copy-to-clipboard";
 interface AppState {
   code: string;
   textStyles: string;
+  selectedNodeName?: string;
+  selectedNodeSize?: { width: number; height: number };
   selectedFramework: Framework;
   isLoading: boolean;
   htmlPreview: HTMLPreview;
@@ -45,18 +47,14 @@ export default function App() {
   const pngCallbackRef = useRef<((data: number[] | null) => void) | null>(null);
 
   const requestExportPng = useCallback((): Promise<number[] | null> => {
-    console.log("[UI] requestExportPng called");
     return new Promise((resolve) => {
       pngCallbackRef.current = resolve;
       postUIMessage(
         { type: "export-selection-png" },
         { targetOrigin: "*" },
       );
-      console.log("[UI] export-selection-png message sent to plugin");
-      // Timeout after 10 seconds
       setTimeout(() => {
         if (pngCallbackRef.current) {
-          console.log("[UI] PNG export timed out after 10s");
           pngCallbackRef.current = null;
           resolve(null);
         }
@@ -74,11 +72,9 @@ export default function App() {
       const msg = event.data.pluginMessage;
       if (!msg) return;
       const untypedMessage = msg as Message;
-      console.log("[ui] message received:", untypedMessage);
 
       // Handle PNG export result
       if (untypedMessage.type === "export-png-result") {
-        console.log("[UI] export-png-result received, data exists:", !!(msg as any).data, "callback exists:", !!pngCallbackRef.current);
         if (pngCallbackRef.current) {
           pngCallbackRef.current((msg as any).data);
           pngCallbackRef.current = null;
@@ -115,10 +111,11 @@ export default function App() {
           break;
 
         case "empty":
-          // const emptyMessage = untypedMessage as EmptyMessage;
           setState((prevState) => ({
             ...prevState,
             code: "",
+            selectedNodeName: undefined,
+            selectedNodeSize: undefined,
             htmlPreview: emptyPreview,
             warnings: [],
             colors: [],
@@ -129,7 +126,6 @@ export default function App() {
 
         case "error":
           const errorMessage = untypedMessage as ErrorMessage;
-
           setState((prevState) => ({
             ...prevState,
             colors: [],
@@ -157,7 +153,6 @@ export default function App() {
     if (updatedFramework !== state.selectedFramework) {
       setState((prevState) => ({
         ...prevState,
-        // code: "// Loading...",
         selectedFramework: updatedFramework,
       }));
       postUISettingsChangingMessage("framework", updatedFramework, {
@@ -184,6 +179,8 @@ export default function App() {
         isLoading={state.isLoading}
         code={state.code}
         textStyles={state.textStyles}
+        selectedNodeName={state.selectedNodeName}
+        selectedNodeSize={state.selectedNodeSize}
         warnings={state.warnings}
         selectedFramework={state.selectedFramework}
         setSelectedFramework={handleFrameworkChange}
