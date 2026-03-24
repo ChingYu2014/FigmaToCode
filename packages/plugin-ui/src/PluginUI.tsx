@@ -25,6 +25,7 @@ import React from "react";
 
 type PluginUIProps = {
   code: string;
+  textStyles: string;
   htmlPreview: HTMLPreview;
   warnings: Warning[];
   selectedFramework: Framework;
@@ -37,6 +38,7 @@ type PluginUIProps = {
   colors: SolidColorConversion[];
   gradients: LinearGradientConversion[];
   isLoading: boolean;
+  onRequestExportPng?: () => Promise<number[] | null>;
 };
 
 const frameworks: Framework[] = ["HTML", "Tailwind", "Flutter", "SwiftUI"];
@@ -175,11 +177,13 @@ export const PluginUI = (props: PluginUIProps) => {
 
             <CodePanel
               code={props.code}
+              textStyles={props.textStyles}
               selectedFramework={props.selectedFramework}
               preferenceOptions={preferenceOptions}
               selectPreferenceOptions={selectPreferenceOptions}
               settings={props.settings}
               onPreferenceChanged={props.onPreferenceChanged}
+              onRequestExportPng={props.onRequestExportPng}
             />
 
             {props.colors.length > 0 && (

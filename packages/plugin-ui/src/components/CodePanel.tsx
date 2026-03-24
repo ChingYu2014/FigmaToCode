@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { coldarkDark as theme } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { CopyButton } from "./CopyButton";
+import { DownloadButton } from "./DownloadButton";
 import EmptyState from "./EmptyState";
 import SettingsGroup from "./SettingsGroup";
 import FrameworkTabs from "./FrameworkTabs";
@@ -15,6 +16,7 @@ import { TailwindSettings } from "./TailwindSettings";
 
 interface CodePanelProps {
   code: string;
+  textStyles: string;
   selectedFramework: Framework;
   settings: PluginSettings | null;
   preferenceOptions: LocalCodegenPreferenceOptions[];
@@ -23,6 +25,7 @@ interface CodePanelProps {
     key: keyof PluginSettings,
     value: boolean | string | number,
   ) => void;
+  onRequestExportPng?: () => Promise<number[] | null>;
 }
 
 const CodePanel = (props: CodePanelProps) => {
@@ -31,6 +34,7 @@ const CodePanel = (props: CodePanelProps) => {
   const initialLinesToShow = 25;
   const {
     code,
+    textStyles,
     preferenceOptions,
     selectPreferenceOptions,
     selectedFramework,
@@ -38,6 +42,9 @@ const CodePanel = (props: CodePanelProps) => {
     onPreferenceChanged,
   } = props;
   const isCodeEmpty = code === "";
+  const hasTextStyles =
+    textStyles !== "" &&
+    textStyles !== "// No text styles in this selection";
 
   // Helper function to add the prefix before every class (or className) in the code.
   // It finds every occurrence of class="..." or className="..." and, for each class,
@@ -139,11 +146,24 @@ const CodePanel = (props: CodePanelProps) => {
           Code
         </p>
         {!isCodeEmpty && (
-          <CopyButton
-            value={prefixedCode}
-            onMouseEnter={handleButtonHover}
-            onMouseLeave={handleButtonLeave}
-          />
+          <div className="flex items-center gap-1.5">
+            <CopyButton
+              value={prefixedCode}
+              onMouseEnter={handleButtonHover}
+              onMouseLeave={handleButtonLeave}
+            />
+            <DownloadButton
+              value={
+                hasTextStyles
+                  ? `${prefixedCode}\n\n/* Text Styles */\n${textStyles}`
+                  : prefixedCode
+              }
+              selectedFramework={selectedFramework}
+              onMouseEnter={handleButtonHover}
+              onMouseLeave={handleButtonLeave}
+              onRequestExportPng={props.onRequestExportPng}
+            />
+          </div>
         )}
       </div>
 
@@ -255,6 +275,32 @@ const CodePanel = (props: CodePanelProps) => {
           </>
         )}
       </div>
+
+      {hasTextStyles && (
+        <div className="w-full flex flex-col gap-2 mt-2">
+          <div className="flex items-center justify-between w-full">
+            <p className="text-lg font-medium text-center dark:text-white rounded-lg">
+              Text Styles
+            </p>
+            <CopyButton value={textStyles} />
+          </div>
+          <div className="rounded-lg overflow-clip">
+            <SyntaxHighlighter
+              language="css"
+              style={theme}
+              customStyle={{
+                fontSize: 12,
+                borderRadius: 8,
+                marginTop: 0,
+                marginBottom: 0,
+                backgroundColor: "#1B1B1B",
+              }}
+            >
+              {textStyles}
+            </SyntaxHighlighter>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

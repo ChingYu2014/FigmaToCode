@@ -43,6 +43,7 @@ export interface PluginSettings
 // Messaging
 export interface ConversionData {
   code: string;
+  textStyles: string;
   settings: PluginSettings;
   htmlPreview: HTMLPreview;
   colors: SolidColorConversion[];

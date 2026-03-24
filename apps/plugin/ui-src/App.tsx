@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { PluginUI } from "plugin-ui";
 import {
   Framework,
@@ -12,11 +12,12 @@ import {
   SettingsChangedMessage,
   Warning,
 } from "types";
-import { postUISettingsChangingMessage } from "./messaging";
+import { postUIMessage, postUISettingsChangingMessage } from "./messaging";
 import copy from "copy-to-clipboard";
 
 interface AppState {
   code: string;
+  textStyles: string;
   selectedFramework: Framework;
   isLoading: boolean;
   htmlPreview: HTMLPreview;
@@ -31,6 +32,7 @@ const emptyPreview = { size: { width: 0, height: 0 }, content: "" };
 export default function App() {
   const [state, setState] = useState<AppState>({
     code: "",
+    textStyles: "",
     selectedFramework: "HTML",
     isLoading: false,
     htmlPreview: emptyPreview,
@@ -40,6 +42,28 @@ export default function App() {
     warnings: [],
   });
 
+  const pngCallbackRef = useRef<((data: number[] | null) => void) | null>(null);
+
+  const requestExportPng = useCallback((): Promise<number[] | null> => {
+    console.log("[UI] requestExportPng called");
+    return new Promise((resolve) => {
+      pngCallbackRef.current = resolve;
+      postUIMessage(
+        { type: "export-selection-png" },
+        { targetOrigin: "*" },
+      );
+      console.log("[UI] export-selection-png message sent to plugin");
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        if (pngCallbackRef.current) {
+          console.log("[UI] PNG export timed out after 10s");
+          pngCallbackRef.current = null;
+          resolve(null);
+        }
+      }, 10000);
+    });
+  }, []);
+
   const rootStyles = getComputedStyle(document.documentElement);
   const figmaColorBgValue = rootStyles
     .getPropertyValue("--figma-color-bg")
@@ -47,8 +71,20 @@ export default function App() {
 
   useEffect(() => {
     window.onmessage = (event: MessageEvent) => {
-      const untypedMessage = event.data.pluginMessage as Message;
+      const msg = event.data.pluginMessage;
+      if (!msg) return;
+      const untypedMessage = msg as Message;
       console.log("[ui] message received:", untypedMessage);
+
+      // Handle PNG export result
+      if (untypedMessage.type === "export-png-result") {
+        console.log("[UI] export-png-result received, data exists:", !!(msg as any).data, "callback exists:", !!pngCallbackRef.current);
+        if (pngCallbackRef.current) {
+          pngCallbackRef.current((msg as any).data);
+          pngCallbackRef.current = null;
+        }
+        return;
+      }
 
       switch (untypedMessage.type) {
         case "conversionStart":
@@ -147,6 +183,7 @@ export default function App() {
       <PluginUI
         isLoading={state.isLoading}
         code={state.code}
+        textStyles={state.textStyles}
         warnings={state.warnings}
         selectedFramework={state.selectedFramework}
         setSelectedFramework={handleFrameworkChange}
@@ -155,6 +192,7 @@ export default function App() {
         settings={state.settings}
         colors={state.colors}
         gradients={state.gradients}
+        onRequestExportPng={requestExportPng}
       />
     </div>
   );

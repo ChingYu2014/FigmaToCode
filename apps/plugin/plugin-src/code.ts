@@ -165,6 +165,32 @@ const standardMode = async () => {
       (userPluginSettings as any)[key] = value;
       figma.clientStorage.setAsync("userPluginSettings", userPluginSettings);
       safeRun(userPluginSettings);
+    } else if (msg.type === "export-selection-png") {
+      console.log("[DEBUG] export-selection-png received");
+      const nodes = figma.currentPage.selection;
+      console.log("[DEBUG] selection count:", nodes.length);
+      if (nodes.length === 0) {
+        console.log("[DEBUG] no selection, sending null");
+        figma.ui.postMessage({ type: "export-png-result", data: null });
+        return;
+      }
+      try {
+        const node = nodes[0];
+        console.log("[DEBUG] exporting node:", node.name, node.type);
+        const pngBytes = await node.exportAsync({
+          format: "PNG",
+          constraint: { type: "SCALE", value: 2 },
+        });
+        console.log("[DEBUG] export success, bytes:", pngBytes.length);
+        figma.ui.postMessage({
+          type: "export-png-result",
+          data: Array.from(pngBytes),
+        });
+        console.log("[DEBUG] postMessage sent with PNG data");
+      } catch (error) {
+        console.error("[DEBUG] Error exporting PNG:", error);
+        figma.ui.postMessage({ type: "export-png-result", data: null });
+      }
     } else if (msg.type === "get-selection-json") {
       console.log("[DEBUG] get-selection-json message received");
 
